@@ -5,6 +5,7 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+st.write("APP INICIADO")
 
 
 def enviar_email(dados):
