@@ -7,7 +7,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 
-# ================= CONFIGURAÇÃO DA PÁGINA =================
+# ================= CONFIGURAÇÃO =================
 st.set_page_config(
     page_title="Solicitação de Admissão",
     page_icon="📝",
@@ -15,168 +15,156 @@ st.set_page_config(
 )
 
 st.title("📝 Solicitação de Admissão")
-st.write("Preencha corretamente os dados abaixo para solicitar uma nova admissão.")
+st.write("Informe seu e-mail corporativo para iniciar a solicitação.")
 
-ARQUIVO = "solicitacoes_admissao.xlsx"
+ARQUIVO_SOLICITACOES = "solicitacoes_admissao.xlsx"
+ARQUIVO_GESTORES = "gestores.xlsx"
 
 # ================= FUNÇÕES =================
 
 def gerar_id():
     ano = datetime.now().year
-    if os.path.exists(ARQUIVO):
-        df = pd.read_excel(ARQUIVO)
-        sequencial = len(df) + 1
+    if os.path.exists(ARQUIVO_SOLICITACOES):
+        df = pd.read_excel(ARQUIVO_SOLICITACOES)
+        seq = len(df) + 1
     else:
-        sequencial = 1
-    return f"ADM-{ano}-{str(sequencial).zfill(5)}"
+        seq = 1
+    return f"ADM-{ano}-{str(seq).zfill(5)}"
+
+
+def identificar_gestor(email):
+    if not os.path.exists(ARQUIVO_GESTORES):
+        return None
+
+    df = pd.read_excel(ARQUIVO_GESTORES)
+    gestor = df[df["email_gestor"].str.lower() == email.lower()]
+
+    if gestor.empty:
+        return None
+
+    return gestor.iloc[0].to_dict()
 
 
 def enviar_email_html(dados, arquivo_excel):
-    try:
-        smtp_host = st.secrets["SMTP_HOST"]
-        smtp_port = int(st.secrets["SMTP_PORT"])
-        smtp_user = st.secrets["SMTP_USER"]
-        smtp_pass = st.secrets["SMTP_PASS"]
-        smtp_from = st.secrets["SMTP_FROM"]
+    smtp_host = st.secrets["SMTP_HOST"]
+    smtp_port = int(st.secrets["SMTP_PORT"])
+    smtp_user = st.secrets["SMTP_USER"]
+    smtp_pass = st.secrets["SMTP_PASS"]
+    smtp_from = st.secrets["SMTP_FROM"]
 
-        destino = "nycolas.pantarine@futtorh.com.br"
+    destino = "nycolas.pantarine@futtorh.com.br"
 
-        assunto = f"📥 Nova Solicitação de Admissão – {dados['empresa']}"
+    assunto = f"📥 Nova Solicitação de Admissão – {dados['empresa']}"
 
-        html = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px;">
-            <div style="max-width: 600px; margin: auto; background: #ffffff; padding: 20px; border-radius: 6px;">
-                
-                <h2 style="color:#1f2937;">Nova Solicitação de Admissão</h2>
+    html = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; background:#f5f5f5; padding:20px;">
+        <div style="max-width:600px; background:#ffffff; padding:20px; border-radius:6px; margin:auto;">
+            <h2>Nova Solicitação de Admissão</h2>
+            <p><strong>Protocolo:</strong> {dados['id_solicitacao']}</p>
+            <hr>
 
-                <p><strong>Protocolo:</strong> {dados['id_solicitacao']}</p>
+            <h3>🏢 Empresa</h3>
+            <p>{dados['empresa']}<br>CNPJ: {dados['cnpj']}</p>
 
-                <hr>
+            <h3>👤 Gestor</h3>
+            <p>{dados['gestor_nome']}<br>{dados['gestor_email']}</p>
 
-                <h3>🏢 Empresa</h3>
-                <p>
-                    <strong>Nome:</strong> {dados['empresa']}<br>
-                    <strong>CNPJ:</strong> {dados['cnpj']}
-                </p>
+            <h3>👨‍💼 Colaborador</h3>
+            <p>{dados['colaborador_nome']}<br>{dados['colaborador_email']}</p>
 
-                <h3>👤 Gestor</h3>
-                <p>
-                    <strong>Nome:</strong> {dados['gestor_nome']}<br>
-                    <strong>E-mail:</strong> {dados['gestor_email']}
-                </p>
+            <h3>📅 Admissão</h3>
+            <p>
+                Cargo: {dados['cargo']}<br>
+                Salário: R$ {dados['salario']:.2f}<br>
+                Data: {dados['data_admissao']}
+            </p>
 
-                <h3>👨‍💼 Colaborador</h3>
-                <p>
-                    <strong>Nome:</strong> {dados['colaborador_nome']}<br>
-                    <strong>E-mail:</strong> {dados['colaborador_email']}
-                </p>
+            <p style="font-size:12px;color:#6b7280;">
+                Enviado em {dados['data_solicitacao']}
+            </p>
+        </div>
+    </body>
+    </html>
+    """
 
-                <h3>📅 Dados da Admissão</h3>
-                <p>
-                    <strong>Cargo:</strong> {dados['cargo']}<br>
-                    <strong>Salário:</strong> R$ {dados['salario']:.2f}<br>
-                    <strong>Data de admissão:</strong> {dados['data_admissao']}
-                </p>
+    msg = MIMEMultipart()
+    msg["From"] = smtp_from
+    msg["To"] = destino
+    msg["Subject"] = assunto
+    msg.attach(MIMEText(html, "html"))
 
-                <hr>
+    with open(arquivo_excel, "rb") as f:
+        anexo = MIMEApplication(f.read(), _subtype="xlsx")
+        anexo.add_header("Content-Disposition", "attachment", filename=os.path.basename(arquivo_excel))
+        msg.attach(anexo)
 
-                <p style="font-size: 12px; color: #6b7280;">
-                    Solicitação enviada em {dados['data_solicitacao']}
-                </p>
+    with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
 
-            </div>
-        </body>
-        </html>
-        """
+# ================= IDENTIFICAÇÃO =================
 
-        msg = MIMEMultipart()
-        msg["From"] = smtp_from
-        msg["To"] = destino
-        msg["Subject"] = assunto
+email_input = st.text_input("📧 E-mail do gestor")
 
-        msg.attach(MIMEText(html, "html"))
+gestor = None
+if email_input:
+    gestor = identificar_gestor(email_input)
 
-        # ===== ANEXO EXCEL =====
-        with open(arquivo_excel, "rb") as f:
-            anexo = MIMEApplication(f.read(), _subtype="xlsx")
-            anexo.add_header(
-                "Content-Disposition",
-                "attachment",
-                filename=os.path.basename(arquivo_excel)
-            )
-            msg.attach(anexo)
-
-        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20) as server:
-            server.login(smtp_user, smtp_pass)
-            server.send_message(msg)
-
-    except Exception as e:
-        st.error("❌ Erro ao enviar o e-mail.")
-        st.exception(e)
+    if gestor:
+        st.success("Gestor identificado com sucesso.")
+        st.text_input("Nome do gestor", gestor["nome_gestor"], disabled=True)
+        st.text_input("Empresa", gestor["empresa"], disabled=True)
+        st.text_input("CNPJ", gestor["cnpj"], disabled=True)
+    else:
+        st.error("❌ E-mail não autorizado. Entre em contato com o RH.")
 
 # ================= FORMULÁRIO =================
 
-with st.form("form_admissao"):
-    st.subheader("👤 Identificação do Gestor")
-    gestor_nome = st.text_input("Nome do gestor")
-    gestor_email = st.text_input("E-mail do gestor")
-    empresa = st.text_input("Empresa")
-    cnpj = st.text_input("CNPJ da empresa")
+if gestor:
+    with st.form("form_admissao"):
+        st.subheader("👨‍💼 Dados do Colaborador")
+        colaborador_nome = st.text_input("Nome do colaborador")
+        colaborador_email = st.text_input("E-mail do colaborador")
 
-    st.subheader("👨‍💼 Dados do Colaborador")
-    colaborador_nome = st.text_input("Nome do colaborador")
-    colaborador_email = st.text_input("E-mail do colaborador")
+        st.subheader("📅 Dados da Admissão")
+        data_admissao = st.date_input(
+            "Data de admissão",
+            min_value=date.today() + timedelta(days=1)
+        )
 
-    st.subheader("📅 Dados da Admissão")
-    data_admissao = st.date_input(
-        "Data de admissão",
-        min_value=date.today() + timedelta(days=1)
-    )
+        cargo = st.text_input("Cargo")
+        salario = st.number_input("Salário fixo (R$)", min_value=0.0, step=100.0, format="%.2f")
 
-    cargo = st.text_input("Cargo")
-    salario = st.number_input(
-        "Salário fixo mensal (R$)",
-        min_value=0.0,
-        step=100.0,
-        format="%.2f"
-    )
+        enviar = st.form_submit_button("Enviar solicitação")
 
-    enviar = st.form_submit_button("Enviar solicitação")
-
-# ================= PROCESSAMENTO =================
-
-if enviar:
-    if not all([
-        gestor_nome, gestor_email, empresa, cnpj,
-        colaborador_nome, colaborador_email,
-        cargo, salario > 0
-    ]):
-        st.error("❌ Preencha todos os campos obrigatórios.")
-    else:
-        dados = {
-            "id_solicitacao": gerar_id(),
-            "empresa": empresa,
-            "cnpj": cnpj,
-            "gestor_nome": gestor_nome,
-            "gestor_email": gestor_email,
-            "colaborador_nome": colaborador_nome,
-            "colaborador_email": colaborador_email,
-            "cargo": cargo,
-            "salario": salario,
-            "data_admissao": data_admissao,
-            "data_solicitacao": datetime.now()
-        }
-
-        if os.path.exists(ARQUIVO):
-            df = pd.read_excel(ARQUIVO)
-            df = pd.concat([df, pd.DataFrame([dados])], ignore_index=True)
+    if enviar:
+        if not all([colaborador_nome, colaborador_email, cargo, salario > 0]):
+            st.error("❌ Preencha todos os campos.")
         else:
-            df = pd.DataFrame([dados])
+            dados = {
+                "id_solicitacao": gerar_id(),
+                "empresa": gestor["empresa"],
+                "cnpj": gestor["cnpj"],
+                "gestor_nome": gestor["nome_gestor"],
+                "gestor_email": gestor["email_gestor"],
+                "colaborador_nome": colaborador_nome,
+                "colaborador_email": colaborador_email,
+                "cargo": cargo,
+                "salario": salario,
+                "data_admissao": data_admissao,
+                "data_solicitacao": datetime.now()
+            }
 
-        df.to_excel(ARQUIVO, index=False)
+            if os.path.exists(ARQUIVO_SOLICITACOES):
+                df = pd.read_excel(ARQUIVO_SOLICITACOES)
+                df = pd.concat([df, pd.DataFrame([dados])], ignore_index=True)
+            else:
+                df = pd.DataFrame([dados])
 
-        enviar_email_html(dados, ARQUIVO)
+            df.to_excel(ARQUIVO_SOLICITACOES, index=False)
 
-        st.success("✅ Solicitação enviada com sucesso!")
-        st.info(f"📌 Protocolo da solicitação: **{dados['id_solicitacao']}**")
+            enviar_email_html(dados, ARQUIVO_SOLICITACOES)
+
+            st.success("✅ Solicitação enviada com sucesso!")
+            st.info(f"📌 Protocolo: {dados['id_solicitacao']}")
