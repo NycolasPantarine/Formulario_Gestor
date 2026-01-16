@@ -8,7 +8,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 
 # ======================================================
-# CONFIGURAÇÕES
+# CONFIGURAÇÃO
 # ======================================================
 st.set_page_config(page_title="Solicitação de Admissão", page_icon="📝", layout="centered")
 
@@ -16,7 +16,7 @@ ARQ_GESTORES = "gestores.xlsx"
 ARQ_SOLICITACOES = "solicitacoes_admissao.xlsx"
 
 # ======================================================
-# FUNÇÕES BASE
+# INICIALIZAÇÃO
 # ======================================================
 def inicializar_gestores():
     if not os.path.exists(ARQ_GESTORES):
@@ -62,12 +62,11 @@ def enviar_email_html(dados, arquivo_excel):
     smtp_from = st.secrets["SMTP_FROM"]
 
     destino = "nycolas.pantarine@futtorh.com.br"
-
     assunto = f"📥 Nova Solicitação de Admissão – {dados['empresa']}"
 
     html = f"""
     <html>
-    <body style="font-family:Arial">
+    <body style="font-family:Arial, sans-serif;">
         <h2>Nova Solicitação de Admissão</h2>
         <p><b>Protocolo:</b> {dados['id_solicitacao']}</p>
         <hr>
@@ -98,13 +97,20 @@ def enviar_email_html(dados, arquivo_excel):
         server.send_message(msg)
 
 # ======================================================
-# PAINEL ADMIN
+# PAINEL ADMINISTRATIVO
 # ======================================================
 st.sidebar.title("🔐 Painel Interno")
-senha = st.sidebar.text_input("Senha administrativa", type="password")
 
-if senha == st.secrets["ADMIN_PASSWORD"]:
-    st.sidebar.success("Acesso liberado")
+admin_email = st.sidebar.text_input("E-mail administrativo")
+admin_senha = st.sidebar.text_input("Senha", type="password")
+
+acesso_admin = (
+    admin_email == st.secrets["ADMIN_EMAIL"] and
+    admin_senha == st.secrets["ADMIN_PASSWORD"]
+)
+
+if acesso_admin:
+    st.sidebar.success("Acesso administrativo liberado")
 
     st.header("👤 Cadastro de Gestores")
 
@@ -132,12 +138,16 @@ if senha == st.secrets["ADMIN_PASSWORD"]:
     st.subheader("📋 Gestores cadastrados")
     st.dataframe(df_gestores)
 
+elif admin_email or admin_senha:
+    st.sidebar.error("Credenciais administrativas inválidas")
+
 st.divider()
 
 # ======================================================
 # FORMULÁRIO PÚBLICO
 # ======================================================
 st.title("📝 Solicitação de Admissão")
+
 email_input = st.text_input("📧 E-mail do gestor")
 
 gestor = identificar_gestor(email_input) if email_input else None
@@ -153,7 +163,10 @@ if gestor:
     with st.form("form_admissao"):
         colaborador_nome = st.text_input("Nome do colaborador")
         colaborador_email = st.text_input("E-mail do colaborador")
-        data_admissao = st.date_input("Data de admissão", min_value=date.today() + timedelta(days=1))
+        data_admissao = st.date_input(
+            "Data de admissão",
+            min_value=date.today() + timedelta(days=1)
+        )
         cargo = st.text_input("Cargo")
         salario = st.number_input("Salário", min_value=0.0, step=100.0)
 
@@ -179,4 +192,4 @@ if gestor:
         df.to_excel(ARQ_SOLICITACOES, index=False)
 
         enviar_email_html(dados, ARQ_SOLICITACOES)
-        st.success("✅ Solicitação enviada com sucesso")
+        st.success("✅ Solicitação enviada com sucesso!")
