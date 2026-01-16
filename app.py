@@ -5,6 +5,7 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 
 # ================= CONFIGURAÇÃO DA PÁGINA =================
 st.set_page_config(
@@ -30,7 +31,7 @@ def gerar_id():
     return f"ADM-{ano}-{str(sequencial).zfill(5)}"
 
 
-def enviar_email(dados):
+def enviar_email_html(dados, arquivo_excel):
     try:
         smtp_host = st.secrets["SMTP_HOST"]
         smtp_port = int(st.secrets["SMTP_PORT"])
@@ -40,37 +41,71 @@ def enviar_email(dados):
 
         destino = "nycolas.pantarine@futtorh.com.br"
 
-        assunto = f"📥 Nova solicitação de admissão - {dados['empresa']}"
+        assunto = f"📥 Nova Solicitação de Admissão – {dados['empresa']}"
 
-        corpo = f"""
-Nova solicitação de admissão recebida.
+        html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px;">
+            <div style="max-width: 600px; margin: auto; background: #ffffff; padding: 20px; border-radius: 6px;">
+                
+                <h2 style="color:#1f2937;">Nova Solicitação de Admissão</h2>
 
-Protocolo: {dados['id_solicitacao']}
+                <p><strong>Protocolo:</strong> {dados['id_solicitacao']}</p>
 
-Empresa: {dados['empresa']}
-CNPJ: {dados['cnpj']}
+                <hr>
 
-Gestor:
-- Nome: {dados['gestor_nome']}
-- E-mail: {dados['gestor_email']}
+                <h3>🏢 Empresa</h3>
+                <p>
+                    <strong>Nome:</strong> {dados['empresa']}<br>
+                    <strong>CNPJ:</strong> {dados['cnpj']}
+                </p>
 
-Colaborador:
-- Nome: {dados['colaborador_nome']}
-- E-mail: {dados['colaborador_email']}
+                <h3>👤 Gestor</h3>
+                <p>
+                    <strong>Nome:</strong> {dados['gestor_nome']}<br>
+                    <strong>E-mail:</strong> {dados['gestor_email']}
+                </p>
 
-Admissão:
-- Cargo: {dados['cargo']}
-- Salário: R$ {dados['salario']:.2f}
-- Data de admissão: {dados['data_admissao']}
+                <h3>👨‍💼 Colaborador</h3>
+                <p>
+                    <strong>Nome:</strong> {dados['colaborador_nome']}<br>
+                    <strong>E-mail:</strong> {dados['colaborador_email']}
+                </p>
 
-Data da solicitação: {dados['data_solicitacao']}
-"""
+                <h3>📅 Dados da Admissão</h3>
+                <p>
+                    <strong>Cargo:</strong> {dados['cargo']}<br>
+                    <strong>Salário:</strong> R$ {dados['salario']:.2f}<br>
+                    <strong>Data de admissão:</strong> {dados['data_admissao']}
+                </p>
+
+                <hr>
+
+                <p style="font-size: 12px; color: #6b7280;">
+                    Solicitação enviada em {dados['data_solicitacao']}
+                </p>
+
+            </div>
+        </body>
+        </html>
+        """
 
         msg = MIMEMultipart()
         msg["From"] = smtp_from
         msg["To"] = destino
         msg["Subject"] = assunto
-        msg.attach(MIMEText(corpo, "plain"))
+
+        msg.attach(MIMEText(html, "html"))
+
+        # ===== ANEXO EXCEL =====
+        with open(arquivo_excel, "rb") as f:
+            anexo = MIMEApplication(f.read(), _subtype="xlsx")
+            anexo.add_header(
+                "Content-Disposition",
+                "attachment",
+                filename=os.path.basename(arquivo_excel)
+            )
+            msg.attach(anexo)
 
         with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20) as server:
             server.login(smtp_user, smtp_pass)
@@ -141,7 +176,7 @@ if enviar:
 
         df.to_excel(ARQUIVO, index=False)
 
-        enviar_email(dados)
+        enviar_email_html(dados, ARQUIVO)
 
         st.success("✅ Solicitação enviada com sucesso!")
         st.info(f"📌 Protocolo da solicitação: **{dados['id_solicitacao']}**")
